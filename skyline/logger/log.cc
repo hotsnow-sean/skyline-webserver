@@ -19,16 +19,11 @@ namespace skyline::logger {
 
 std::ostream& operator<<(std::ostream& os, LogLevel level) {
     switch (level) {
-        case LogLevel::Debug:
-            return os << "DEBUG";
-        case LogLevel::Info:
-            return os << "INFO";
-        case LogLevel::Warn:
-            return os << "WARN";
-        case LogLevel::Error:
-            return os << "ERROR";
-        case LogLevel::Fatal:
-            return os << "FATAL";
+#define _FUNCTION(name)  \
+    case LogLevel::name: \
+        return os << #name;
+        FOREACH_LOG_LEVEL(_FUNCTION)
+#undef _FUNCTION
         default:
             return os << "UNKNOW";
     }
@@ -48,27 +43,31 @@ std::string format(const char* fmt, ...) {
     return "";
 }
 
+LogEvent::LogEvent(std::source_location loc)
+    : file(loc.file_name()),
+      line(loc.line()),
+      thread_id(getThreadID()),
+      time(::time(0)) {}
+
+LogEvent::LogEvent(std::string content, std::source_location loc)
+    : LogEvent(std::move(loc)) {
+    this->content = std::move(content);
+}
+
 // ---------------------------- LogEventWrap ----------------------------
 
 LogEventWrap::LogEventWrap(Logger& logger, LogLevel level,
-                           const LogEvent& event) noexcept
-    : _logger(logger), _level(level) {
-    _event.file = event.file;
-    _event.line = event.line;
-    _event.elapse = event.elapse;
-    _event.thread_id = event.thread_id;
-    _event.time = event.time;
-}
+                           LogEvent event) noexcept
+    : _logger(logger), _level(level), _event(std::move(event)) {}
 
 LogEventWrap::~LogEventWrap() {
-    _event.content = ss.str();
+    _event.content = _ss.str();
     _logger.log(_level, _event);
 }
 
 // ---------------------------- Logger ----------------------------
 
-Logger::Logger(std::string name) : _name(std::move(name)) {
-}
+Logger::Logger(std::string name) : _name(std::move(name)) {}
 
 void Logger::log(LogLevel level, const LogEvent& event) const {
     if (level < this->level) return;
@@ -77,25 +76,15 @@ void Logger::log(LogLevel level, const LogEvent& event) const {
     }
 }
 
-void Logger::debug(const LogEvent& event) const {
-    log(LogLevel::Debug, event);
-}
+void Logger::debug(const LogEvent& event) const { log(LogLevel::DEBUG, event); }
 
-void Logger::info(const LogEvent& event) const {
-    log(LogLevel::Debug, event);
-}
+void Logger::info(const LogEvent& event) const { log(LogLevel::INFO, event); }
 
-void Logger::warn(const LogEvent& event) const {
-    log(LogLevel::Debug, event);
-}
+void Logger::warn(const LogEvent& event) const { log(LogLevel::WARN, event); }
 
-void Logger::error(const LogEvent& event) const {
-    log(LogLevel::Debug, event);
-}
+void Logger::error(const LogEvent& event) const { log(LogLevel::ERROR, event); }
 
-void Logger::fatal(const LogEvent& event) const {
-    log(LogLevel::Debug, event);
-}
+void Logger::fatal(const LogEvent& event) const { log(LogLevel::FATAL, event); }
 
 void Logger::addAppender(LogAppender::ptr appender) {
     _appenders.emplace(std::move(appender));
@@ -105,20 +94,16 @@ void Logger::delAppender(const LogAppender::ptr& appender) {
     _appenders.erase(appender);
 }
 
-const std::string& Logger::getName() const {
-    return _name;
-}
+const std::string& Logger::getName() const { return _name; }
 
 // ---------------------------- Appender ----------------------------
 
 static LogFormatter::ptr kDefaultFormatter = std::make_shared<LogFormatter>(
     "%d{%Y-%m-%d %H:%M:%S}%T%t%T[%p]%T[%c]%T%f:%l%T%m%n");
-LogAppender::LogAppender() : LogAppender(kDefaultFormatter) {
-}
+LogAppender::LogAppender() : LogAppender(kDefaultFormatter) {}
 
 LogAppender::LogAppender(LogFormatter::ptr formatter)
-    : _formatter(std::move(formatter)) {
-}
+    : _formatter(std::move(formatter)) {}
 
 void LogAppender::setFormatter(LogFormatter::ptr formatter) {
     if (formatter) _formatter.swap(formatter);
@@ -135,8 +120,7 @@ FileLogAppender::FileLogAppender(std::string filename)
     _filestream.open(_filename, std::ios::app);
     if (!_filestream) {
         auto& logger = getRootLogger();
-        SKYLINE_LOG_FMT_DEBUG(logger, "log file: `%s` open failed",
-                              _filename.c_str());
+        LOG_FMT_DEBUG(logger, "log file: `%s` open failed", _filename.c_str());
     }
 }
 

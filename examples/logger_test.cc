@@ -10,11 +10,11 @@ int main() {
     // 测试控制台日志输出
     SKYLINE_LOG_DEBUG(logger) << "a debug log";
     SKYLINE_LOG_INFO(logger) << "a info log";
-    SKYLINE_LOG_FMT_DEBUG(logger, "format debug %d", 123);
-    SKYLINE_LOG_FMT_INFO(logger, "format info %d", 456);
+    LOG_FMT_DEBUG(logger, "format debug %d", 123);
+    LOG_FMT_INFO(logger, "format info %d", 456);
 
     // 测试等级控制
-    logger.level = LogLevel::Info;
+    logger.level = LogLevel::INFO;
     SKYLINE_LOG_DEBUG(logger) << "should not output debug log";
     SKYLINE_LOG_INFO(logger) << "should output info log";
 

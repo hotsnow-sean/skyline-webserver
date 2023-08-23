@@ -10,7 +10,7 @@
  * example:
  *      auto& logger = skyline::logger::getRootLogger();
  *      SKYLINE_LOG_DEBUG(logger) << "test log";
- *      SKYLINE_LOG_FMT_DEBUG(logger, "%s", "test log");
+ *      LOG_FMT_DEBUG(logger, "%s", "test log");
  *
  * tip:
  * 由于Appender可以被多个Logger同时使用，因此它的线程安全由其子类实现处理
@@ -19,75 +19,35 @@
 
 #pragma once
 
-#include <sys/syscall.h>
-
-#include <ctime>
 #include <fstream>
 #include <functional>
 #include <memory>
+#include <source_location>
 #include <sstream>
 #include <unordered_set>
 
-#define SKYLINE_LOG_LEVEL(log, lv)                       \
-    if (log.level <= lv)                                 \
-    skyline::logger::LogEventWrap(                       \
-        log, lv,                                         \
-        skyline::logger::LogEvent{                       \
-            .file = __FILE__,                            \
-            .line = __LINE__,                            \
-            .thread_id = skyline::logger::getThreadID(), \
-            .time = std::time(0),                        \
-        })                                               \
-        .ss
+#define SKYLINE_LOG(log, lv) \
+    if (log.level <= lv) skyline::logger::LogEventWrap(log, lv)
 
 #define SKYLINE_LOG_DEBUG(log) \
-    SKYLINE_LOG_LEVEL(log, skyline::logger::LogLevel::Debug)
-#define SKYLINE_LOG_INFO(log) \
-    SKYLINE_LOG_LEVEL(log, skyline::logger::LogLevel::Info)
-#define SKYLINE_LOG_WARN(log) \
-    SKYLINE_LOG_LEVEL(log, skyline::logger::LogLevel::Warn)
+    SKYLINE_LOG(log, skyline::logger::LogLevel::DEBUG)
+#define SKYLINE_LOG_INFO(log) SKYLINE_LOG(log, skyline::logger::LogLevel::INFO)
+#define SKYLINE_LOG_WARN(log) SKYLINE_LOG(log, skyline::logger::LogLevel::WARN)
 #define SKYLINE_LOG_ERROR(log) \
-    SKYLINE_LOG_LEVEL(log, skyline::logger::LogLevel::Error)
+    SKYLINE_LOG(log, skyline::logger::LogLevel::ERROR)
 #define SKYLINE_LOG_FATAL(log) \
-    SKYLINE_LOG_LEVEL(log, skyline::logger::LogLevel::Fatal)
-
-#define SKYLINE_LOG_FMT_LEVEL(logg, lv, fmt, ...)                          \
-    if (logg.level <= lv)                                                  \
-    logg.log(lv, skyline::logger::LogEvent{                                \
-                     .file = __FILE__,                                     \
-                     .line = __LINE__,                                     \
-                     .thread_id = skyline::logger::getThreadID(),          \
-                     .time = std::time(0),                                 \
-                     .content = skyline::logger::format(fmt, __VA_ARGS__), \
-                 })
-
-#define SKYLINE_LOG_FMT_DEBUG(log, fmt, ...)                          \
-    SKYLINE_LOG_FMT_LEVEL(log, skyline::logger::LogLevel::Debug, fmt, \
-                          __VA_ARGS__)
-#define SKYLINE_LOG_FMT_INFO(log, fmt, ...)                          \
-    SKYLINE_LOG_FMT_LEVEL(log, skyline::logger::LogLevel::Info, fmt, \
-                          __VA_ARGS__)
-#define SKYLINE_LOG_FMT_WARN(log, fmt, ...)                          \
-    SKYLINE_LOG_FMT_LEVEL(log, skyline::logger::LogLevel::Warn, fmt, \
-                          __VA_ARGS__)
-#define SKYLINE_LOG_FMT_ERROR(log, fmt, ...)                          \
-    SKYLINE_LOG_FMT_LEVEL(log, skyline::logger::LogLevel::Error, fmt, \
-                          __VA_ARGS__)
-#define SKYLINE_LOG_FMT_FATAL(log, fmt, ...)                          \
-    SKYLINE_LOG_FMT_LEVEL(log, skyline::logger::LogLevel::Fatal, fmt, \
-                          __VA_ARGS__)
+    SKYLINE_LOG(log, skyline::logger::LogLevel::FATAL)
 
 namespace skyline::logger {
 
 class Logger;
 
 // 日志级别
+#define FOREACH_LOG_LEVEL(f) f(DEBUG) f(INFO) f(WARN) f(ERROR) f(FATAL)
 enum class LogLevel {
-    Debug = 1,
-    Info,
-    Warn,
-    Error,
-    Fatal,
+#define _FUNCTION(name) name,
+    FOREACH_LOG_LEVEL(_FUNCTION)
+#undef _FUNCTION
 };
 std::ostream& operator<<(std::ostream& os, LogLevel level);
 
@@ -99,6 +59,11 @@ struct LogEvent {
     uint32_t thread_id{0};      // 线程 id
     time_t time{0};             // 时间戳
     std::string content;
+
+    explicit LogEvent(
+        std::source_location loc = std::source_location::current());
+    explicit LogEvent(std::string content, std::source_location loc =
+                                               std::source_location::current());
 };
 
 // 只为简化格式化输出
@@ -109,16 +74,22 @@ std::string format(const char* fmt, ...);
 class LogEventWrap final {
 public:
     LogEventWrap(Logger& logger, LogLevel level,
-                 const LogEvent& event) noexcept;
+                 LogEvent event = LogEvent()) noexcept;
     ~LogEventWrap();
 
-public:
-    std::stringstream ss;
+    template <typename T>
+    friend LogEventWrap&& operator<<(LogEventWrap&& wrap, T t)
+        requires requires(T x) { std::stringstream() << t; }
+    {
+        wrap._ss << t;
+        return std::move(wrap);
+    }
 
 private:
     Logger& _logger;
     LogLevel _level;
     LogEvent _event;
+    std::stringstream _ss;
 };
 
 /**
@@ -169,7 +140,7 @@ public:
     void setFormatter(LogFormatter::ptr formatter);
 
 public:
-    LogLevel level{LogLevel::Debug};
+    LogLevel level{LogLevel::DEBUG};
 
 protected:
     LogFormatter::ptr _formatter;  // 保证有一个可用的 formatter
@@ -194,7 +165,7 @@ public:
     const std::string& getName() const;
 
 public:
-    LogLevel level{LogLevel::Debug};
+    LogLevel level{LogLevel::DEBUG};
 
 private:
     std::string _name;
@@ -231,5 +202,20 @@ Logger& getRootLogger() noexcept;
 Logger& getLogger(const std::string& name);
 
 uint32_t getThreadID();
+
+template <typename... Args>
+void LOG_FMT(Logger& logger, LogLevel level, const char* fmt, Args&&... args) {
+    if (logger.level <= level) {
+        logger.log(level, LogEvent(format(fmt, args...)));
+    }
+}
+
+#define _FUNCTION(name)                                                    \
+    template <typename... Args>                                            \
+    void LOG_FMT_##name(Logger& logger, const char* fmt, Args&&... args) { \
+        LOG_FMT(logger, LogLevel::name, fmt, args...);                     \
+    }
+FOREACH_LOG_LEVEL(_FUNCTION)
+#undef _FUNCTION
 
 }  // namespace skyline::logger

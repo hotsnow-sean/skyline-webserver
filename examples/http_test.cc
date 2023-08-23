@@ -45,7 +45,7 @@ int main() {
             res.body = "Glob\r\n" + ss.str();
             return 0;
         });
-    getSystemLogger().level = skyline::logger::LogLevel::Error;
+    getSystemLogger().level = skyline::logger::LogLevel::ERROR;
     server.Start();
     return 0;
 }
