@@ -66,7 +66,8 @@ avg QPS: **75133.9**
 
 ## 其它
 
-`skyline/http` 目录下以 `.rl.cc` 结尾的文件为开源软件 `Ragel` 生成。
++ `skyline/http` 目录下以 `.rl.cc` 结尾的文件为开源软件 `Ragel` 生成。
++ 请使用 GCC 编译，原因在于 `source_location` 使用函数默认参数的方式初始化，而 clang 经过测试默认参数的执行是提前进行的，会导致日志行号不正确。
 
 ## 参考
 
