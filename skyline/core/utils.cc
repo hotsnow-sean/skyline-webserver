@@ -22,10 +22,15 @@ private:
 logger::Logger& getSystemLogger() {
     static logger::Logger system_logger = []() -> logger::Logger {
         logger::Logger logger("system");
-        logger.addAppender(std::make_shared<SafeStdoutLogAppender>());
+        logger.addAppender(getSafeStdoutAppender());
         return logger;
     }();
     return system_logger;
+}
+
+std::shared_ptr<logger::LogAppender> getSafeStdoutAppender() {
+    static auto appender = std::make_shared<SafeStdoutLogAppender>();
+    return appender;
 }
 
 }  // namespace skyline::core

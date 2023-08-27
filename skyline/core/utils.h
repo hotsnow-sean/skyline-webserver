@@ -15,19 +15,18 @@
 namespace skyline::core {
 
 logger::Logger& getSystemLogger();
+std::shared_ptr<logger::LogAppender> getSafeStdoutAppender();
 
 template <typename... Args>
-void SYSTEM_LOG_FMT(skyline::logger::Logger& logger,
-                    skyline::logger::LogLevel level, const char* fmt,
+void SYSTEM_LOG_FMT(skyline::logger::LogLevel level, const char* fmt,
                     Args&&... args) {
-    skyline::logger::LOG_FMT(logger, level, fmt, args...);
+    skyline::logger::LOG_FMT(getSystemLogger(), level, fmt, args...);
 }
 
-#define _FUNCTION(name)                                                        \
-    template <typename... Args>                                                \
-    void SYSTEM_LOG_FMT_##name(skyline::logger::Logger& logger,                \
-                               const char* fmt, Args&&... args) {              \
-        SYSTEM_LOG_FMT(logger, skyline::logger::LogLevel::name, fmt, args...); \
+#define _FUNCTION(name)                                                \
+    template <typename... Args>                                        \
+    void SYSTEM_LOG_FMT_##name(const char* fmt, Args&&... args) {      \
+        SYSTEM_LOG_FMT(skyline::logger::LogLevel::name, fmt, args...); \
     }
 FOREACH_LOG_LEVEL(_FUNCTION)
 #undef _FUNCTION
