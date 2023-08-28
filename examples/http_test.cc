@@ -1,6 +1,7 @@
 #include <signal.h>
 
 #include "core/event_loop.h"
+#include "core/reactor.h"
 #include "core/utils.h"
 #include "http/http_server.h"
 #include "logger/log.h"
@@ -8,27 +9,29 @@
 using namespace skyline::core;
 using namespace skyline::http;
 
-HttpServer* server_ptr{};
+Reactor* reactor_ptr{};
 auto& kLogger = skyline::logger::getRootLogger();
 
 void sigint_handler(int sig) {
     if (sig == SIGINT) {
         SKYLINE_LOG_INFO(kLogger) << "stop server...";
-        if (server_ptr != nullptr) server_ptr->Stop();
+        if (reactor_ptr != nullptr) reactor_ptr->Stop();
     }
 }
 
 int main() {
     std::stringstream ss;
     signal(SIGINT, sigint_handler);
+
+    Reactor reactor(4);
+    reactor_ptr = &reactor;
     HttpServer server(
         ::sockaddr_in{
             .sin_family = AF_INET,
             .sin_port = htons(8889),
             .sin_addr = {.s_addr = htonl(INADDR_ANY)},
         },
-        4);
-    server_ptr = &server;
+        reactor);
     server.dispatch.addServlet(
         "/skyline/xx",
         [&ss](const HttpRequest& req, HttpResponse& res, auto session) {
@@ -45,7 +48,8 @@ int main() {
             res.body = "Glob\r\n" + ss.str();
             return 0;
         });
+    server.StartListen();
     getSystemLogger().level = skyline::logger::LogLevel::ERROR;
-    server.Start();
+    reactor.Start();
     return 0;
 }

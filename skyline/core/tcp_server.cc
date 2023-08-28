@@ -5,10 +5,10 @@
 
 #include <cstring>
 
+#include "reactor.h"
 #include "socket_context.h"
 #include "utils.h"
 
-static const size_t kThreadNum = std::thread::hardware_concurrency();
 static constexpr size_t kReadBufferLen = 1024;
 
 namespace skyline::core {
@@ -145,14 +145,15 @@ private:
 
 }  // namespace detail
 
-TcpServer::TcpServer(const sockaddr_in& addr, std::size_t sub_reactor_num)
-    : sub_reactors_(std::min(kThreadNum, sub_reactor_num)) {
-    auto acceptor = std::make_shared<detail::Acceptor>(main_reactor_, addr);
+TcpServer::TcpServer(const sockaddr_in& addr, Reactor& reactor)
+    : addr_(addr), reactor_(reactor) {}
+
+void TcpServer::StartListen() {
+    auto acceptor =
+        std::make_shared<detail::Acceptor>(reactor_.main_reactor, addr_);
+    sock_fd_ = acceptor->fd();
     acceptor->setAfterAcceptCallback([this, acceptor](int fd) {
-        auto& loop = this->sub_reactors_.empty()
-                         ? this->main_reactor_
-                         : this->sub_reactors_[this->cur_reactor_id_++ %
-                                               this->sub_reactors_.size()];
+        auto& loop = this->reactor_.NextLoop();
         auto conn = std::make_shared<detail::Connection>(loop, fd);
         conn->setHandleMassageCallback(std::bind(&TcpServer::OnRecv, this,
                                                  std::placeholders::_1,
@@ -160,34 +161,11 @@ TcpServer::TcpServer(const sockaddr_in& addr, std::size_t sub_reactor_num)
         this->AfterConnect(conn);
         loop.AddSocketContext(conn);
     });
-    main_reactor_.AddSocketContext(std::move(acceptor));
+    reactor_.main_reactor.AddSocketContext(std::move(acceptor));
 }
 
-TcpServer::~TcpServer() {
-    if (!main_reactor_.isQuit()) {
-        Stop();
-    }
-}
-
-void TcpServer::Start() {
-    // start sub reactor loop
-    for (auto& reactor : sub_reactors_) {
-        sub_threads_.emplace_back([&reactor]() { reactor.Loop(); });
-    }
-    main_reactor_.Loop();
-    if (!main_reactor_.isQuit()) {
-        Stop();
-    }
-}
-
-void TcpServer::Stop() {
-    main_reactor_.Stop();
-    for (auto& reactor : sub_reactors_) {
-        reactor.Stop();
-    }
-    for (auto& t : sub_threads_) {
-        t.join();
-    }
+void TcpServer::StopListen() {
+    reactor_.main_reactor.RemoveSocketContext(sock_fd_);
 }
 
 void TcpServer::AfterConnect(std::shared_ptr<Channel> ctx) {}

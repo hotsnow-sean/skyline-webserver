@@ -17,6 +17,7 @@ set(LIB_CORE_SRC
   skyline/core/channel.cc
   skyline/core/socket_context.cc
   skyline/core/event_loop.cc
+  skyline/core/reactor.cc
   skyline/core/tcp_server.cc
   skyline/core/utils.cc
 )
